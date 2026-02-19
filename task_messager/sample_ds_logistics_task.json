@@ -1,0 +1,31 @@
+{
+  "title": "DATA/Lojistik (Analiz): Soğuk zincir ETA sapmalarını öngör",
+  "summary": "Soğutmalı sevkiyatların upstream gecikmeler nedeniyle teslimat slotunu kaçıracağını operasyonu önceden uyaran geçici bir tahmin katmanı oluştur.",
+  "problem": "Son iki haftada soğuk zincir ihracat hatlarında %19 geç kalma oranı var; ancak hub yükü, sıcaklık alarmları ve taşıyıcı telemetrisi kombinasyonlarının gecikmeleri nasıl tetiklediğini açıklayamıyoruz.",
+  "estimated_duration": "6 Saat",
+  "task_owner": "Gökhan Elbistan",
+  "analysis_steps": [
+    {
+      "title": "Veri Denetimi",
+      "detail": "Son 30 güne ait telemetri, WMS çıkış taramaları ve gümrük temizleme zamanlarını birleştir; eksik ya da çelişen kayıtları işaretle."
+    },
+    {
+      "title": "Özellik Mühendisliği",
+      "detail": "Hat bazlı yoğunluk skorları, dorsedeki sıcaklık varyansı ve bekleme süresi yüzdeliklerini türet; modeli bu değişkenlerle besle."
+    },
+    {
+      "title": "Model Eğitimi",
+      "detail": "ETA'yı 2+ saat kaçıracak sevkiyatları sınıflamak için gradient boosting modeli eğit; en etkili sinyaller için SHAP açıklamalarını çıkar."
+    },
+    {
+      "title": "Operasyonel Rehber",
+      "detail": "Planlayıcıların TMS kuyruğunda alarmı nasıl alacağını ve her hat için hangi eskalasyon sürelerinin geçerli olduğunu dokümante et."
+    }
+  ],
+  "acceptance_criteria": [
+    "Birleştirilen veri seti geçerli telemetri ve gümrük olaylarına sahip sevkiyatların en az %95'ini içermeli.",
+    "'Geç' sınıfı için model doğruluk/geri çağırma değeri doğrulama katmanında 0.72'nin üzerinde kalmalı.",
+    "Alarm payload'ı hat, taşıyıcı, olasılık ve en çok katkı veren üç özelliği listelemeli.",
+    "Runbook Ops Control Tower ile gözden geçirilmiş ve Confluence'ta onay kaydı tutulmuş olmalı."
+  ]
+}
