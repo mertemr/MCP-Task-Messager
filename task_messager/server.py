@@ -4,7 +4,7 @@ import html
 import json
 import os
 import sys
-from typing import Any, Dict, Optional
+from typing import Any
 
 import httpx
 from mcp.server.fastmcp import Context, FastMCP
@@ -18,30 +18,20 @@ def _default_analysis_steps() -> list[dict[str, str]]:
         {
             "title": "Sorgulama",
             "detail": (
-                "İletilen fatura ID/numaraları kullanılarak header ve lines"
-                " tablolarındaki tutar uyumu kontrol edilir."
+                "İletilen fatura ID/numaraları kullanılarak header ve lines tablolarındaki tutar uyumu kontrol edilir."
             ),
         },
         {
             "title": "Log Analizi",
-            "detail": (
-                "LOG tablolarından oluşturma, güncelleme ve statü"
-                " değişiklikleri incelenir."
-            ),
+            "detail": ("LOG tablolarından oluşturma, güncelleme ve statü değişiklikleri incelenir."),
         },
         {
             "title": "Entegrasyon Kontrolü",
-            "detail": (
-                "Transfer kuyruğunda (queue) bekleyen kayıtlar ve hata"
-                " mesajları gözden geçirilir."
-            ),
+            "detail": ("Transfer kuyruğunda (queue) bekleyen kayıtlar ve hata mesajları gözden geçirilir."),
         },
         {
             "title": "Bulgu Paylaşımı",
-            "detail": (
-                "Tespit edilen anomali veya çözüm önerisi teknik dille"
-                " raporlanır."
-            ),
+            "detail": ("Tespit edilen anomali veya çözüm önerisi teknik dille raporlanır."),
         },
     ]
 
@@ -51,14 +41,8 @@ def _default_acceptance_criteria() -> list[str]:
 
     return [
         "Şüpheli faturaların ham verisi incelenmiş ve dökümü alınmıştır.",
-        (
-            "Sorunun kaynağı (kullanıcı hatası mı yoksa yazılım bug'ı mı)"
-            " netleştirilmiştir."
-        ),
-        (
-            "Analiz sonucu ve çözüm önerisi talep sahibine"
-            " iletilmiştir."
-        ),
+        ("Sorunun kaynağı (kullanıcı hatası mı yoksa yazılım bug'ı mı) netleştirilmiştir."),
+        ("Analiz sonucu ve çözüm önerisi talep sahibine iletilmiştir."),
     ]
 
 
@@ -76,7 +60,7 @@ class SendMessageInput(BaseModel):
     summary: str = Field(..., description="High level summary of the task")
     problem: str = Field(..., description="Problem statement")
     estimated_duration: str = Field(..., description="Estimated effort, e.g. '2 Saat'")
-    task_owner: Optional[str] = Field(None, description="Görevin sorumlusu")
+    task_owner: str | None = Field(None, description="Görevin sorumlusu")
     analysis_steps: list[SolutionStep] = Field(
         default_factory=_default_analysis_steps,
         description="Ordered checklist under 'Muhtemel Çözüm'",
@@ -92,7 +76,7 @@ class SendMessageResult(BaseModel):
 
     success: bool
     message: str
-    http_status: Optional[int] = None
+    http_status: int | None = None
 
 
 def _format_summary_block(summary: str, problem: str) -> str:
@@ -101,7 +85,7 @@ def _format_summary_block(summary: str, problem: str) -> str:
     return (
         f"<b>Özet:</b> {html.escape(summary)}<br><br>"
         f"<b>Problem:</b> {html.escape(problem)}"
-    )
+    )  # fmt: skip
 
 
 def _format_analysis_steps(steps: list[Any]) -> str:
@@ -119,9 +103,7 @@ def _format_analysis_steps(steps: list[Any]) -> str:
             title = str(step)
             detail = ""
 
-        lines.append(
-            "• " + f"<b>{html.escape(title)}:</b> " + html.escape(detail)
-        )
+        lines.append("• " + f"<b>{html.escape(title)}:</b> " + html.escape(detail))
     return "<br>".join(lines)
 
 
@@ -131,7 +113,7 @@ def _format_acceptance_criteria(criteria: list[str]) -> str:
     return "<br>".join(f"• {html.escape(item)}" for item in criteria)
 
 
-def build_cards_payload(data: SendMessageInput) -> Dict[str, Any]:
+def build_cards_payload(data: SendMessageInput) -> dict[str, Any]:
     """Build Google Chat cards payload that follows the investigation template."""
 
     # Sorumlu alanı her zaman tek bir kişiyle paylaşılacak.
@@ -140,83 +122,51 @@ def build_cards_payload(data: SendMessageInput) -> Dict[str, Any]:
     sections: list[dict[str, Any]] = []
     meta_widgets: list[dict[str, Any]] = []
 
-    meta_widgets.append(
-        {
-            "keyValue": {
-                "topLabel": "Tahmini Süre",
-                "content": html.escape(data.estimated_duration),
-            }
+    meta_widgets.append({
+        "keyValue": {
+            "topLabel": "Tahmini Süre",
+            "content": html.escape(data.estimated_duration),
         }
-    )
+    })
 
     if data.task_owner:
-        meta_widgets.append(
-            {
-                "keyValue": {
-                    "topLabel": "Sorumlu",
-                    "content": html.escape(str(data.task_owner)),
-                }
+        meta_widgets.append({
+            "keyValue": {
+                "topLabel": "Sorumlu",
+                "content": html.escape(str(data.task_owner)),
             }
-        )
+        })
 
     if meta_widgets:
         sections.append({"widgets": meta_widgets})
 
-    sections.append(
-        {
-            "header": "Görev Açıklaması",
-            "widgets": [
-                {
-                    "textParagraph": {
-                        "text": _format_summary_block(data.summary, data.problem)
-                    }
-                }
-            ],
-        }
-    )
+    sections.append({
+        "header": "Görev Açıklaması",
+        "widgets": [{"textParagraph": {"text": _format_summary_block(data.summary, data.problem)}}],
+    })
 
-    sections.append(
-        {
-            "header": "Muhtemel Çözüm",
-            "widgets": [
-                {
-                    "textParagraph": {
-                        "text": _format_analysis_steps(data.analysis_steps)
-                    }
-                }
-            ],
-        }
-    )
+    sections.append({
+        "header": "Muhtemel Çözüm",
+        "widgets": [{"textParagraph": {"text": _format_analysis_steps(data.analysis_steps)}}],
+    })
 
-    sections.append(
-        {
-            "header": "Kabul Kriterleri",
-            "widgets": [
-                {
-                    "textParagraph": {
-                        "text": _format_acceptance_criteria(
-                            data.acceptance_criteria
-                        )
-                    }
-                }
-            ],
-        }
-    )
+    sections.append({
+        "header": "Kabul Kriterleri",
+        "widgets": [{"textParagraph": {"text": _format_acceptance_criteria(data.acceptance_criteria)}}],
+    })
 
     card = {"header": {"title": str(data.title)}, "sections": sections}
 
-    payload: Dict[str, Any] = {"cards": [card]}
+    payload: dict[str, Any] = {"cards": [card]}
     return payload
 
 
-async def post_to_webhook(payload: Dict[str, Any]) -> SendMessageResult:
+async def post_to_webhook(payload: dict[str, Any]) -> SendMessageResult:
     """Send the prepared payload to Google Chat webhook and wrap the response."""
 
     url = os.getenv("GOOGLE_CHAT_WEBHOOK_URL", "").strip()
     if not url:
-        return SendMessageResult(
-            success=False, message="GOOGLE_CHAT_WEBHOOK_URL is not set"
-        )
+        return SendMessageResult(success=False, message="GOOGLE_CHAT_WEBHOOK_URL is not set")
 
     timeout = httpx.Timeout(10.0, connect=10.0)
     async with httpx.AsyncClient(timeout=timeout) as client:

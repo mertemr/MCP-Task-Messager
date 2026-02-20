@@ -18,6 +18,11 @@ dependencies = [
   "python-dotenv>=1.0.1",
 ]
 
+[dependency-groups]
+dev = [
+    "ruff>=0.15.2",
+]
+
 [project.scripts]
 task-messager = "task_messager.server:main"
 
@@ -71,8 +76,3 @@ ignore = [
 python_version = "3.12"
 warn_unused_configs = true
 ignore_missing_imports = true
-
-[dependency-groups]
-dev = [
-    "ruff>=0.15.2",
-]
