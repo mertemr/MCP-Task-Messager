@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 import html
 import json
+import logging
 import os
 import sys
+from textwrap import dedent
 from typing import Any
 
 import httpx
@@ -11,41 +11,76 @@ from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, Field
 
 
-def _default_analysis_steps() -> list[dict[str, str]]:
-    """Return the default investigation checklist for the card."""
+def _setup_logging() -> logging.Logger:
+    """Configure and return the module logger."""
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 
-    return [
-        {
-            "title": "Sorgulama",
-            "detail": (
-                "İletilen fatura ID/numaraları kullanılarak header ve lines tablolarındaki tutar uyumu kontrol edilir."
-            ),
-        },
-        {
-            "title": "Log Analizi",
-            "detail": ("LOG tablolarından oluşturma, güncelleme ve statü değişiklikleri incelenir."),
-        },
-        {
-            "title": "Entegrasyon Kontrolü",
-            "detail": ("Transfer kuyruğunda (queue) bekleyen kayıtlar ve hata mesajları gözden geçirilir."),
-        },
-        {
-            "title": "Bulgu Paylaşımı",
-            "detail": ("Tespit edilen anomali veya çözüm önerisi teknik dille raporlanır."),
-        },
-    ]
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+
+    logger = logging.getLogger("task_messager")
+    logger.setLevel(getattr(logging, log_level, logging.INFO))
+    logger.addHandler(handler)
+    logger.propagate = False
+
+    return logger
 
 
-def _default_acceptance_criteria() -> list[str]:
-    """Return default acceptance checklist entries."""
+logger = _setup_logging()
+app = FastMCP(
+    name="google-chat",
+    instructions=dedent("""
+        You are a helpful assistant that formats support investigation tasks
+        into structured messages and sends them toa Google Chat space via webhook.
+        The messages should follow a specific template with sections for task description,
+        investigation steps, and acceptance criteria.
+    """),
+    host=os.getenv("MCP_HOST", "127.0.0.1"),
+    port=int(os.getenv("MCP_PORT", "8000")),
+)
+httpx_client = httpx.AsyncClient(
+    headers={"User-Agent": "MCP-Task-Messager/1.0"},
+    timeout=httpx.Timeout(15.0, connect=10.0),
+)
 
-    return [
-        "Şüpheli faturaların ham verisi incelenmiş ve dökümü alınmıştır.",
-        ("Sorunun kaynağı (kullanıcı hatası mı yoksa yazılım bug'ı mı) netleştirilmiştir."),
-        ("Analiz sonucu ve çözüm önerisi talep sahibine iletilmiştir."),
-    ]
+
+# ---------------------------------------------------------------------------
+# Default values for SendMessageInput fields
+# ---------------------------------------------------------------------------
+DEFAULT_ANALYSIS_STEPS: list[dict[str, str]] = [
+    {
+        "title": "Sorgulama",
+        "detail": "İletilen fatura ID/numaraları kullanılarak header ve lines tablolarındaki tutar uyumu kontrol edilir.",
+    },
+    {
+        "title": "Log Analizi",
+        "detail": "LOG tablolarından oluşturma, güncelleme ve statü değişiklikleri incelenir.",
+    },
+    {
+        "title": "Entegrasyon Kontrolü",
+        "detail": "Transfer kuyruğunda (queue) bekleyen kayıtlar ve hata mesajları gözden geçirilir.",
+    },
+    {
+        "title": "Bulgu Paylaşımı",
+        "detail": "Tespit edilen anomali veya çözüm önerisi teknik dille raporlanır.",
+    },
+]
+
+DEFAULT_ACCEPTANCE_CRITERIA: list[str] = [
+    "Şüpheli faturaların ham verisi incelenmiş ve dökümü alınmıştır.",
+    "Sorunun kaynağı (kullanıcı hatası mı yoksa yazılım bug'ı mı) netleştirilmiştir.",
+    "Analiz sonucu ve çözüm önerisi talep sahibine iletilmiştir.",
+]
 
 
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
 class SolutionStep(BaseModel):
     """Describe a single investigation step within the solution plan."""
 
@@ -62,11 +97,11 @@ class SendMessageInput(BaseModel):
     estimated_duration: str = Field(..., description="Estimated effort, e.g. '2 Saat'")
     task_owner: str | None = Field(None, description="Görevin sorumlusu")
     analysis_steps: list[SolutionStep] = Field(
-        default_factory=_default_analysis_steps,
+        default_factory=lambda: list(DEFAULT_ANALYSIS_STEPS),
         description="Ordered checklist under 'Muhtemel Çözüm'",
     )
     acceptance_criteria: list[str] = Field(
-        default_factory=_default_acceptance_criteria,
+        default_factory=lambda: list(DEFAULT_ACCEPTANCE_CRITERIA),
         description="Items listed under 'Kabul Kriterleri'",
     )
 
@@ -115,9 +150,6 @@ def _format_acceptance_criteria(criteria: list[str]) -> str:
 
 def build_cards_payload(data: SendMessageInput) -> dict[str, Any]:
     """Build Google Chat cards payload that follows the investigation template."""
-
-    # Sorumlu alanı her zaman tek bir kişiyle paylaşılacak.
-    data.task_owner = "Gökhan Elbistan"
 
     sections: list[dict[str, Any]] = []
     meta_widgets: list[dict[str, Any]] = []
@@ -168,10 +200,9 @@ async def post_to_webhook(payload: dict[str, Any]) -> SendMessageResult:
     if not url:
         return SendMessageResult(success=False, message="GOOGLE_CHAT_WEBHOOK_URL is not set")
 
-    timeout = httpx.Timeout(10.0, connect=10.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with httpx_client:
         try:
-            resp = await client.post(url, json=payload)
+            resp = await httpx_client.post(url, json=payload)
             if 200 <= resp.status_code < 300:
                 return SendMessageResult(
                     success=True,
@@ -188,10 +219,11 @@ async def post_to_webhook(payload: dict[str, Any]) -> SendMessageResult:
             return SendMessageResult(success=False, message=f"Request error: {exc}")
 
 
-app = FastMCP("google-chat")
-
-
-@app.tool()
+@app.tool(
+    title="Send Google Chat Message",
+    description="Send a structured investigation task message to Google Chat space via webhook",
+    annotations={"kwargs": "Flexible input that can contain task details in various formats"},
+)
 async def send_google_chat_message(ctx: Context, **kwargs) -> dict[str, Any]:
     """Send a structured investigation task message to Google Chat."""
     try:
@@ -221,11 +253,16 @@ async def send_google_chat_message(ctx: Context, **kwargs) -> dict[str, Any]:
 
 def main() -> None:
     """Entrypoint that starts the FastMCP server."""
+    logger.info("Starting MCP server...")
 
     try:
         app.run()
     except KeyboardInterrupt:
+        logger.info("Interrupted")
         sys.exit(0)
+    except Exception as e:
+        logger.exception("Server error occurred: %s", e)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
