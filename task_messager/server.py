@@ -5,9 +5,12 @@ import sys
 from textwrap import dedent
 from typing import Any
 
+import dotenv
 import httpx
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
+
+dotenv.load_dotenv()
 
 
 def _setup_logging() -> logging.Logger:
@@ -54,7 +57,7 @@ httpx_client = httpx.AsyncClient(
 DEFAULT_ANALYSIS_STEPS: list[dict[str, str]] = [
     {
         "title": "Sorgulama",
-        "detail": "İletilen fatura ID/numaraları kullanılarak header ve lines tablolarındaki tutar uyumu kontrol edilir.",
+        "detail": "İletilen fatura ID/numaraları kullanılarak header ve lines tablolarındaki tutar uyumu kontrol edilir.",  # noqa: E501
     },
     {
         "title": "Log Analizi",
@@ -243,18 +246,20 @@ async def send_google_chat_message(
         summary: High level summary of the task
         problem: Detailed problem statement
         estimated_duration: Estimated effort (e.g., '2 Saat')
-        task_owner: Person responsible for the task (optional)
+        task_owner: Person responsible for the task (optional, falls back to TASK_OWNER env variable if not provided)
         analysis_steps: Custom investigation steps (optional, uses defaults if not provided)
         acceptance_criteria: Custom acceptance criteria (optional, uses defaults if not provided)
     """
     try:
+        effective_task_owner = task_owner or os.getenv("TASK_OWNER")
+
         # Prepare the input data, using defaults where not provided
         input_data = {
             "title": title,
             "summary": summary,
             "problem": problem,
             "estimated_duration": estimated_duration,
-            "task_owner": task_owner,
+            "task_owner": effective_task_owner,
         }
 
         if analysis_steps is not None:

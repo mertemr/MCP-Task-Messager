@@ -1,9 +1,9 @@
 [project]
 name = "task-messager"
-version = "0.1.2"
+version = "0.1.3"
 description = "MCP server to send templated messages to Google Chat via Incoming Webhook"
 authors = [
-  { name = "Muhammet Ali AYGUN", email = "109526680+IrohAmca@users.noreply.github.com" }
+  { name = "Muhammet Ali Aygün", email = "109526680+IrohAmca@users.noreply.github.com" }
 ]
 maintainers = [
   { name = "Gökhan Elbistan", email = "74424764+gkhnelbstn@users.noreply.github.com"},
