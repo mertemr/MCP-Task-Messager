@@ -1,0 +1,17 @@
+*.git*
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.venv/
+__pycache__/
+.DS_Store
+.env
+.idea/
+.vscode/
+.*_cache/
+README.md
+*.env*
+dist/
+build/
+*.egg-info/

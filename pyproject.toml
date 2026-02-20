@@ -1,8 +1,14 @@
 [project]
 name = "task-messager"
-version = "0.1.2"
+version = "0.1.3"
 description = "MCP server to send templated messages to Google Chat via Incoming Webhook"
-authors = [{ name = "Muhammet Ali AYGUN" }]
+authors = [
+  { name = "Muhammet Ali Aygün", email = "109526680+IrohAmca@users.noreply.github.com" }
+]
+maintainers = [
+  { name = "Gökhan Elbistan", email = "74424764+gkhnelbstn@users.noreply.github.com"},
+  { name = "Mert Emirimam", email = "48881002+mertemr@users.noreply.github.com"},
+]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,15 +18,64 @@ dependencies = [
   "python-dotenv>=1.0.1",
 ]
 
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "ruff>=0.15.2",
+]
+
 [project.scripts]
 task-messager = "task_messager.server:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["task_messager"]
+include = ["*", "task_messager.*"]
 
 [tool.ruff]
 line-length = 120
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+preview = true
+
+[tool.ruff.lint]
+select = [
+  "A",   # flake8-builtins
+  "C4",  # flake8-comprehensions
+  "FBT", # flake8-boolean-trap
+  "ISC", # flake8-implicit-str-concat
+  "PYI", # flake8-pyi
+  "RET", # flake8-return
+  "RSE", # flake8-raise
+  # --- Pylint rules
+  "PLC", # Convention
+  "PLE", # Error
+  "PLW", # Warning
+  # --- PyCodeStyle rules
+  "E",   # Errors
+  "W",   # Warnings
+  # --- Other tools
+  "F",    # pyflakes
+  "I",    # isort
+  "RUF",  # ruff-specific rules
+  "UP",   # pyupgrade
+]
+ignore = [
+  "PLC0415", # `import` should be at the top-level of a file
+  "PLR2004", # Magic value used in comparison, consider replacing `int(...)` with a constant variable
+  # --- String contains ambiguous "..." character rules: [DISABLED FOR TURKISH CHARACTERS]
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    "RUF032",
+  # ---
+]
 
 [tool.mypy]
 python_version = "3.12"

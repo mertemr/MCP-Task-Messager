@@ -4,14 +4,25 @@ This is a Google Chat webhook server that posts structured Destek/Data görev ka
 
 - Tool name: `task-messager`
 - Env var required: `GOOGLE_CHAT_WEBHOOK_URL`
-- Optional env var: `TASK_OWNER` (default task owner if not provided in message)
+- Optional env vars: `TASK_OWNER`, `MCP_HOST`, `MCP_PORT`, `LOG_LEVEL`
 
-## Running locally
+## Quick Start
+
+### 1. Set up environment variables
+
+Copy the example file and configure your values:
+
+```bash
+cp .env.example .env
+# Edit .env and set your GOOGLE_CHAT_WEBHOOK_URL
+```
+
+### 2. Running locally
 
 ```bash
 # inside this folder
 uv sync
-uv run task-messager.server
+uv run task-messager
 ```
 
 ## Message schema
@@ -36,16 +47,58 @@ Varsayılan "Muhtemel Çözüm" adımları ve "Kabul Kriterleri" uygulamanın i�
 
 ## Docker
 
-Build image and run server:
+Build and run the server in a container:
 
 ```bash
-docker build -t task-messager -f Dockerfile .
-docker run --rm -e GOOGLE_CHAT_WEBHOOK_URL=*** -e TASK_OWNER="" -p 8080:8080 task-messager
+# Build the image
+docker build -t task-messager:latest .
+
+# Run with environment variables
+docker run --rm \
+  -e GOOGLE_CHAT_WEBHOOK_URL="your-webhook-url" \
+  -e TASK_OWNER="Default Owner" \
+  -e LOG_LEVEL="INFO" \
+  -p 8000:8000 \
+  task-messager:latest
 ```
 
-## Windsurf MCP client config
+Or use an .env file:
 
-`.windsurf/mcp.json` dosyanıza aşağıdaki girdiyi ekleyin:
+```bash
+docker run --rm --env-file .env -p 8000:8000 task-messager:latest
+```
+
+## MCP Client Configuration
+
+### Windsurf / Claude Desktop / Cline
+
+Add this configuration to your MCP settings file:
+- Windsurf: `.windsurf/mcp.json`
+- Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
+- Cline: VSCode settings
+
+```json
+{
+  "mcpServers": {
+    "task-messager": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "<PATH_TO_REPO>",
+        "run",
+        "task-messager"
+      ],
+      "env": {
+        "GOOGLE_CHAT_WEBHOOK_URL": "<YOUR_GOOGLE_CHAT_WEBHOOK>",
+        "TASK_OWNER": "<DEFAULT_TASK_OWNER>",
+        "LOG_LEVEL": "INFO"
+      }
+    }
+  }
+}
+```
+
+**Alternative with Python directly:**
 
 ```json
 {
@@ -53,16 +106,18 @@ docker run --rm -e GOOGLE_CHAT_WEBHOOK_URL=*** -e TASK_OWNER="" -p 8080:8080 tas
     "task-messager": {
       "command": "python",
       "args": [
-        "<PATH_TO_PYTHON_EXE>",
-        "<PATH_TO_REPO>/task_messager/server.py"
+        "-m",
+        "task_messager.server"
       ],
+      "cwd": "<PATH_TO_REPO>",
       "env": {
         "GOOGLE_CHAT_WEBHOOK_URL": "<YOUR_GOOGLE_CHAT_WEBHOOK>",
-        "TASK_OWNER": "<DEFAULT_TASK_OWNER>"
+        "TASK_OWNER": "<DEFAULT_TASK_OWNER>",
+        "LOG_LEVEL": "INFO"
       }
     }
   }
 }
 ```
 
-> Not: `PATH_TO_PYTHON_EXE`, depo yolu ve webhook URL’sini kendi ortamınıza göre doldurun; bu değerleri repoya koymayın.
+> **Important:** Replace `<PATH_TO_REPO>` with the absolute path to this repository and `<YOUR_GOOGLE_CHAT_WEBHOOK>` with your actual webhook URL. Never commit credentials to version control.
