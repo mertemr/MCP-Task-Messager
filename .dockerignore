@@ -12,3 +12,6 @@ __pycache__/
 .*_cache/
 README.md
 *.env*
+dist/
+build/
+*.egg-info/
