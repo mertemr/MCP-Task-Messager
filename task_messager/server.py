@@ -104,15 +104,23 @@ def _format_summary_block(summary: str, problem: str) -> str:
     )
 
 
-def _format_analysis_steps(steps: list[SolutionStep]) -> str:
+def _format_analysis_steps(steps: list[Any]) -> str:
     """Return a HTML bullet list describing the investigation plan."""
 
     lines = []
     for step in steps:
+        if isinstance(step, SolutionStep):
+            title = step.title
+            detail = step.detail
+        elif isinstance(step, dict):
+            title = str(step.get("title", "Adım"))
+            detail = str(step.get("detail", ""))
+        else:
+            title = str(step)
+            detail = ""
+
         lines.append(
-            "• "
-            + f"<b>{html.escape(step.title)}:</b> "
-            + html.escape(step.detail)
+            "• " + f"<b>{html.escape(title)}:</b> " + html.escape(detail)
         )
     return "<br>".join(lines)
 
@@ -126,9 +134,8 @@ def _format_acceptance_criteria(criteria: list[str]) -> str:
 def build_cards_payload(data: SendMessageInput) -> Dict[str, Any]:
     """Build Google Chat cards payload that follows the investigation template."""
 
-    task_owner = os.getenv("TASK_OWNER", "").strip()
-    if task_owner and not data.task_owner:
-        data.task_owner = task_owner
+    # Sorumlu alanı her zaman tek bir kişiyle paylaşılacak.
+    data.task_owner = "Gökhan Elbistan"
 
     sections: list[dict[str, Any]] = []
     meta_widgets: list[dict[str, Any]] = []
