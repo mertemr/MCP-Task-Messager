@@ -99,7 +99,7 @@ class SendMessageInput(BaseModel):
     estimated_duration: str = Field(..., description="Estimated effort, e.g. '2 Saat'")
     task_owner: str | None = Field(None, description="Görevin sorumlusu")
     analysis_steps: list[SolutionStep] = Field(
-        default_factory=lambda: list(DEFAULT_ANALYSIS_STEPS),
+        default_factory=lambda: [SolutionStep.model_validate(step) for step in DEFAULT_ANALYSIS_STEPS],
         description="Ordered checklist under 'Muhtemel Çözüm'",
     )
     acceptance_criteria: list[str] = Field(
@@ -254,7 +254,7 @@ async def send_google_chat_message(
         effective_task_owner = task_owner or os.getenv("TASK_OWNER")
 
         # Prepare the input data, using defaults where not provided
-        input_data = {
+        input_data: dict[str, Any] = {
             "title": title,
             "summary": summary,
             "problem": problem,
