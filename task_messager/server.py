@@ -1,5 +1,4 @@
 import html
-import json
 import logging
 import os
 import sys
@@ -7,7 +6,7 @@ from textwrap import dedent
 from typing import Any
 
 import httpx
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
 
@@ -198,52 +197,75 @@ async def post_to_webhook(payload: dict[str, Any]) -> SendMessageResult:
 
     url = os.getenv("GOOGLE_CHAT_WEBHOOK_URL", "").strip()
     if not url:
+        logger.warning("GOOGLE_CHAT_WEBHOOK_URL environment variable not set")
         return SendMessageResult(success=False, message="GOOGLE_CHAT_WEBHOOK_URL is not set")
 
-    async with httpx_client:
-        try:
-            resp = await httpx_client.post(url, json=payload)
-            if 200 <= resp.status_code < 300:
-                return SendMessageResult(
-                    success=True,
-                    message="Message sent",
-                    http_status=resp.status_code,
-                )
+    try:
+        logger.info("Sending message to Google Chat webhook")
+        resp = await httpx_client.post(url, json=payload)
+        resp.raise_for_status()
 
-            return SendMessageResult(
-                success=False,
-                message=f"HTTP {resp.status_code}: {resp.text}",
-                http_status=resp.status_code,
-            )
-        except httpx.RequestError as exc:
-            return SendMessageResult(success=False, message=f"Request error: {exc}")
+        logger.info(f"Message sent successfully: HTTP {resp.status_code}")
+        return SendMessageResult(
+            success=True,
+            message="Message sent",
+            http_status=resp.status_code,
+        )
+    except httpx.HTTPStatusError:
+        logger.error(f"Failed to send message: HTTP {resp.status_code} - {resp.text}")
+        return SendMessageResult(
+            success=False,
+            message=f"HTTP {resp.status_code}: {resp.text}",
+            http_status=resp.status_code,
+        )
+    except httpx.RequestError as exc:
+        logger.exception(f"Request error while sending message: {exc}")
+        return SendMessageResult(success=False, message=f"Request error: {exc}")
 
 
 @app.tool(
     title="Send Google Chat Message",
     description="Send a structured investigation task message to Google Chat space via webhook",
-    annotations={"kwargs": "Flexible input that can contain task details in various formats"},
 )
-async def send_google_chat_message(ctx: Context, **kwargs) -> dict[str, Any]:
-    """Send a structured investigation task message to Google Chat."""
+async def send_google_chat_message(
+    title: str,
+    summary: str,
+    problem: str,
+    estimated_duration: str,
+    task_owner: str | None = None,
+    analysis_steps: list[dict[str, str]] | None = None,
+    acceptance_criteria: list[str] | None = None,
+) -> dict[str, Any]:
+    """Send a structured investigation task message to Google Chat.
+
+    Args:
+        title: Task title shown in the card header
+        summary: High level summary of the task
+        problem: Detailed problem statement
+        estimated_duration: Estimated effort (e.g., '2 Saat')
+        task_owner: Person responsible for the task (optional)
+        analysis_steps: Custom investigation steps (optional, uses defaults if not provided)
+        acceptance_criteria: Custom acceptance criteria (optional, uses defaults if not provided)
+    """
     try:
-        if "kwargs" in kwargs:
-            wrapped = kwargs.get("kwargs")
-            if isinstance(wrapped, str):
-                try:
-                    kwargs = json.loads(wrapped)
-                except Exception:
-                    pass
-            elif isinstance(wrapped, dict):
-                kwargs = wrapped
+        # Prepare the input data, using defaults where not provided
+        input_data = {
+            "title": title,
+            "summary": summary,
+            "problem": problem,
+            "estimated_duration": estimated_duration,
+            "task_owner": task_owner,
+        }
 
-        for container_key in ("data", "input", "payload"):
-            if container_key in kwargs and isinstance(kwargs[container_key], dict):
-                kwargs = kwargs[container_key]
-                break
+        if analysis_steps is not None:
+            input_data["analysis_steps"] = [SolutionStep(**step) for step in analysis_steps]
 
-        data = SendMessageInput(**kwargs)
+        if acceptance_criteria is not None:
+            input_data["acceptance_criteria"] = acceptance_criteria
+
+        data = SendMessageInput(**input_data)
     except Exception as e:
+        logger.error(f"Failed to parse input: {e}")
         return SendMessageResult(success=False, message=f"Invalid input: {e}").model_dump()
 
     payload = build_cards_payload(data)
