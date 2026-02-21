@@ -14,8 +14,7 @@ ENV UV_PROJECT_ENVIRONMENT=/usr/local \
     UV_LINK_MODE=copy \
     UV_LOCKED=1 \
     UV_COMPILE_BYTECODE=1 \
-    UV_NO_EDITABLE=1 \
-    UV_NO_CONFIG=0
+    UV_NO_EDITABLE=1
 
 COPY pyproject.toml uv.lock ./
 
@@ -40,6 +39,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /usr/local/lib/python${PYTHON_VERSION} /usr/local/lib/python${PYTHON_VERSION}
 
 COPY --chown=1000:1000 . .
+
+USER appuser
 
 ENV GOOGLE_CHAT_WEBHOOK_URL="" \
     TASK_OWNER=""
