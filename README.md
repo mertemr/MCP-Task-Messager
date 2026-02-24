@@ -1,93 +1,72 @@
-# MCP Google Chat Server
+# task-messager
 
-This is a Google Chat webhook server that posts structured Destek/Data görev kartları through the MCP (Modular Chat Platform) framework.
+Google Chat webhook sunucusu; MCP (Modular Chat Platform) üzerinden yapılandırılmış görev kartları gönderir.
 
-- Tool name: `task-messager`
-- Env var required: `GOOGLE_CHAT_WEBHOOK_URL`
-- Optional env vars: `TASK_OWNER`, `MCP_HOST`, `MCP_PORT`, `LOG_LEVEL`
+## İçindekiler
 
-## Quick Start
+- [Hızlı Başlangıç](#hızlı-başlangıç)
+- [Çalıştırma (Docker ve Lokal)](#çalıştırma-docker-ve-lokal)
+- [MCP İstemci Konfigürasyonu](#mcp-istemci-konfigürasyonu)
+- [Çevresel Değişkenler](#çevresel-değişkenler)
+- [Mesaj Şeması](#mesaj-şeması)
 
-### 1. Set up environment variables
+## Hızlı Başlangıç
 
-Copy the example file and configure your values:
+1. Ortam değişkenlerini ayarlayın (örnek `.env.example`):
 
 ```bash
 cp .env.example .env
-# Edit .env and set your GOOGLE_CHAT_WEBHOOK_URL
+# .env içinde GOOGLE_CHAT_WEBHOOK_URL değerini ayarlayın
 ```
 
-### 2. Running locally
+2. Lokal geliştirme:
 
 ```bash
-# inside this folder
+# repository kökünden
 uv sync
 uv run task-messager
 ```
 
-## Message schema
+## Çalıştırma (Docker ve Lokal)
 
-Input JSON:
-
-- `title`: string — card header (örn. `DATA/Destek (Analiz): ...`)
-- `summary`: string — "Özet" bölümündeki kısa açıklama
-- `problem`: string — bildirilen sorun/hipotez
-- `estimated_duration`: string — tahmini süre (örn. `2 Saat`)
-- `task_owner` (optional): string — görevin sorumlusu
-- `analysis_steps` (optional): list of objects `{ "title": str, "detail": str }`
-- `acceptance_criteria` (optional): list of strings
-
-Response JSON:
-
-- `success`: bool
-- `message`: string
-- `http_status`: number (optional)
-
-Varsayılan "Muhtemel Çözüm" adımları ve "Kabul Kriterleri" uygulamanın içinde yerleşik olarak gelir; payload'da göndererek override edebilirsiniz.
-
-## Docker
-
-Build and run the server in a container:
+Docker ile çalıştırma:
 
 ```bash
-# Build the image
 docker build -t task-messager:latest .
-
-# Run with environment variables
-docker run --rm \
-  -e GOOGLE_CHAT_WEBHOOK_URL="your-webhook-url" \
-  -e TASK_OWNER="Default Owner" \
-  -e LOG_LEVEL="INFO" \
-  -p 8000:8000 \
-  task-messager:latest
+docker run --rm -e GOOGLE_CHAT_WEBHOOK_URL="your-webhook-url" -e TASK_OWNER="Default Owner" -e LOG_LEVEL="INFO" -p 8000:8000 task-messager:latest
 ```
 
-Or use an .env file:
+`.env` dosyasıyla:
 
 ```bash
 docker run --rm --env-file .env -p 8000:8000 task-messager:latest
 ```
 
-## MCP Client Configuration
+## MCP İstemci Konfigürasyonu
 
-### Windsurf / Claude Desktop / Cline
+Aşağıda popüler MCP istemcileri için örnek konfigürasyonlar yer alır. `PATH_TO_REPO` ve `YOUR_GOOGLE_CHAT_WEBHOOK` değerlerini kendi ortamınıza göre değiştirin.
 
-Add this configuration to your MCP settings file:
-- Windsurf: `.windsurf/mcp.json`
-- Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
-- Cline: VSCode settings
+- VSCode (`.vscode/mcp.json`)
+
+```json
+{
+  "servers": {
+    "task-mcp": {
+      "type": "sse",
+      "url": "http://127.0.0.1:8000/sse"
+    }
+  }
+}
+```
+
+- Windsurf (`.windsurf/mcp.json`)
 
 ```json
 {
   "mcpServers": {
     "task-messager": {
       "command": "uv",
-      "args": [
-        "--directory",
-        "<PATH_TO_REPO>",
-        "run",
-        "task-messager"
-      ],
+      "args": ["--directory", "<PATH_TO_REPO>", "run", "task-messager"],
       "env": {
         "GOOGLE_CHAT_WEBHOOK_URL": "<YOUR_GOOGLE_CHAT_WEBHOOK>",
         "TASK_OWNER": "<DEFAULT_TASK_OWNER>",
@@ -98,26 +77,77 @@ Add this configuration to your MCP settings file:
 }
 ```
 
-**Alternative with Python directly:**
+- Claude Desktop (macOS / Windows)
+
+Dosya konumları:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\\Claude\\claude_desktop_config.json`
+
+İçerik örneği (JSON içinde `mcpServers` alanına ekleyin):
+
+```json
+{
+  "mcpServers": {
+    "task-messager": {
+      "command": "uv",
+      "args": ["--directory", "<PATH_TO_REPO>", "run", "task-messager"],
+      "env": { "GOOGLE_CHAT_WEBHOOK_URL": "<YOUR_GOOGLE_CHAT_WEBHOOK>" }
+    }
+  }
+}
+```
+
+- Cline (VSCode settings veya Cline konfigürasyonu)
+
+VSCode ayarlarına eklemek için örnek:
+
+```json
+"mcpServers": {
+  "task-messager": {
+    "command": "uv",
+    "args": ["--directory", "<PATH_TO_REPO>", "run", "task-messager"],
+    "env": {"GOOGLE_CHAT_WEBHOOK_URL": "<YOUR_GOOGLE_CHAT_WEBHOOK>"}
+  }
+}
+```
+
+- Alternatif (Python doğrudan)
 
 ```json
 {
   "mcpServers": {
     "task-messager": {
       "command": "python",
-      "args": [
-        "-m",
-        "task_messager.server"
-      ],
+      "args": ["-m", "task_messager.server"],
       "cwd": "<PATH_TO_REPO>",
-      "env": {
-        "GOOGLE_CHAT_WEBHOOK_URL": "<YOUR_GOOGLE_CHAT_WEBHOOK>",
-        "TASK_OWNER": "<DEFAULT_TASK_OWNER>",
-        "LOG_LEVEL": "INFO"
-      }
+      "env": { "GOOGLE_CHAT_WEBHOOK_URL": "<YOUR_GOOGLE_CHAT_WEBHOOK>" }
     }
   }
 }
 ```
 
-> **Important:** Replace `<PATH_TO_REPO>` with the absolute path to this repository and `<YOUR_GOOGLE_CHAT_WEBHOOK>` with your actual webhook URL. Never commit credentials to version control.
+## Çevresel Değişkenler
+
+- `GOOGLE_CHAT_WEBHOOK_URL` (zorunlu): Google Chat Incoming Webhook URL
+- `TASK_OWNER` (opsiyonel): Görev için varsayılan sorumlu
+- `MCP_HOST`, `MCP_PORT` (opsiyonel): MCP ile ilgili ayarlar
+- `LOG_LEVEL` (opsiyonel): `INFO`, `DEBUG`, vb.
+
+## Mesaj Şeması
+
+Input JSON alanları (kısa):
+
+- `title`: string — kart başlığı
+- `summary`: string — kısa özet
+- `problem`: string — bildirilen sorun veya hipotez
+- `estimated_duration`: string — tahmini süre (örn. `2 Saat`)
+- `task_owner` (opsiyonel): string
+- `analysis_steps` (opsiyonel): liste `{ "title": str, "detail": str }`
+- `acceptance_criteria` (opsiyonel): liste string
+
+Response JSON:
+
+- `success`: bool
+- `message`: string
+- `http_status`: number (opsiyonel)
