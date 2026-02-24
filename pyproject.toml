@@ -22,7 +22,14 @@ dev = [
   "python-dotenv>=1.0.1",
   "mypy>=1.19.1",
   "ruff>=0.15.2",
+  "task-messager",
 ]
+
+[tool.uv.workspace]
+members = ["."]
+
+[tool.uv.sources]
+task-messager = { workspace = true, editable = true }
 
 [project.scripts]
 task-messager = "task_messager.server:main"

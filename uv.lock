@@ -709,6 +709,7 @@ dev = [
     { name = "mypy" },
     { name = "python-dotenv" },
     { name = "ruff" },
+    { name = "task-messager" },
 ]
 
 [package.metadata]
@@ -723,6 +724,7 @@ dev = [
     { name = "mypy", specifier = ">=1.19.1" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "ruff", specifier = ">=0.15.2" },
+    { name = "task-messager", editable = "." },
 ]
 
 [[package]]
