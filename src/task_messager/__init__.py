@@ -5,10 +5,9 @@ try:
 except Exception:
     __version__ = "0.2.X"
 
-from .core import DOMAINS
+from .core import DOMAINS, app
 from .logger import setup_logging
 from .models import AnalysisStep, Domain, SendMessageInput, SendMessageResult, SolutionStep
-from .server import app
 
 __all__ = [
     "DOMAINS",

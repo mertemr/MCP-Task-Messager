@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -96,7 +99,7 @@ class SendMessageInput(BaseModel):
         raise ValueError("participants must be a string or list of strings")
 
     @model_validator(mode="after")
-    def ensure_no_task_owner_in_participants(self) -> "SendMessageInput":
+    def ensure_no_task_owner_in_participants(self) -> SendMessageInput:
         if self.task_owner and self.participants:
             self.participants = [p for p in self.participants if p != self.task_owner]
             if not self.participants:
@@ -130,3 +133,35 @@ class SendMessageResult(BaseModel):
         if not v.strip():
             raise ValueError("Message must not be empty")
         return v.strip()
+
+
+@dataclass
+class SolutionStepSection:
+    """Tek bir çözüm adımı — başlık ve opsiyonel alt maddeler.
+
+    Örnek:
+        SolutionStepSection(
+            title="Veritabanı Sorgusu",
+            items=["Index eklenir", "EXPLAIN ile doğrulanır"],
+        )
+    """
+
+    title: str
+    items: list[str] = field(default_factory=list)
+
+
+@dataclass
+class TaskDescription:
+    """4 bölümlü scrum görev açıklaması.
+
+    Attributes:
+        summary:     Kısa özet cümlesi.
+        problem:     Çözülmek istenen sorunun açıklaması.
+        solution_steps: Numaralı adımlar; her adım başlık + alt maddeler içerir.
+        advantages:  Çözümün avantajları (madde listesi).
+    """
+
+    summary: str
+    problem: str
+    solution_steps: list[SolutionStepSection] = field(default_factory=list)
+    advantages: list[str] = field(default_factory=list)

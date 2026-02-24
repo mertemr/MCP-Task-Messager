@@ -1,5 +1,12 @@
 # ruff: noqa: E501
+import os
+from textwrap import dedent
 from typing import TYPE_CHECKING
+
+import httpx
+from mcp.server.fastmcp import FastMCP
+
+from task_messager import __version__
 
 if TYPE_CHECKING:
     from task_messager.models import Domain
@@ -218,3 +225,45 @@ DOMAINS: "dict[str, Domain]" = {
         ],
     },
 }
+
+
+app = FastMCP(
+    name="task-mcp",
+    instructions=dedent("""
+        You are a helpful assistant that formats support investigation tasks
+        into structured messages and sends them to a Google Chat space via webhook.
+
+        Available domains / task types:
+          - backend   : API, database, queue, microservice issues
+          - frontend  : UI bug, rendering, performance, browser compatibility
+          - devops    : CI/CD, infrastructure, Docker, cloud, deployment
+          - mobile    : iOS/Android crash, build, store submission
+          - data      : Data pipeline, ETL, analytics, reporting issues
+          - business  : Non-technical tasks like documentation, process improvement, etc.
+          - general   : Catch-all when domain is unclear
+
+        When the user describes a task, pick the most suitable domain so that
+        domain-specific investigation steps and acceptance criteria are pre-filled.
+        The user can override any field explicitly.
+
+        CRITICAL - task_owner vs participants rules:
+          - task_owner is WHO THE TASK IS ASSIGNED TO (the responsible person).
+          - participants are OBSERVERS / STAKEHOLDERS who are mentioned but are NOT the assignee.
+          - If the user says "bana aç" or does not specify → task_owner = TASK_OWNER env var (the requester themselves).
+          - If the user says "Ali'ye aç" or "Ali'ye ver" → task_owner = "Ali", even if others are mentioned.
+          - If the user says "katılımcılar: X, Y" or "CC: X, Y" or "ekle: X, Y" → those go to participants, NOT task_owner.
+          - NEVER assign the task to participants. The task is always owned by a single task_owner.
+          - participants is a separate field shown as "Katılımcılar" in the card — it is purely informational.
+
+        Always confirm the filled-in card details before sending unless the user
+        explicitly says "gönder" or "send directly".
+    """),
+    host=os.getenv("MCP_HOST", "0.0.0.0"),
+    port=int(os.getenv("MCP_PORT", "8000")),
+)
+
+
+httpx_client = httpx.AsyncClient(
+    headers={"User-Agent": f"MCP-Task-Messager/{__version__}"},
+    timeout=httpx.Timeout(15.0, connect=10.0),
+)
