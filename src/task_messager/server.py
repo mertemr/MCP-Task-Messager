@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 from mcp.server.fastmcp import FastMCP
 
+from task_messager import __version__
 from task_messager.core import DOMAINS
 from task_messager.logger import setup_logging
 from task_messager.models import SendMessageInput, SendMessageResult, SolutionStep
@@ -46,7 +47,7 @@ app = FastMCP(
 )
 
 httpx_client = httpx.AsyncClient(
-    headers={"User-Agent": "MCP-Task-Messager/1.0"},
+    headers={"User-Agent": f"MCP-Task-Messager/{__version__}"},
     timeout=httpx.Timeout(15.0, connect=10.0),
 )
 
