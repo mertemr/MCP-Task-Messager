@@ -1,0 +1,22 @@
+services:
+  task-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${TASK_MCP_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      - GOOGLE_CHAT_WEBHOOK_URL=${GOOGLE_CHAT_WEBHOOK_URL}
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+      # Values for transport:
+      # - "sse" for Server-Sent Events (SSE) [default]
+      # - "streamable-http" for Streamable HTTP responses
+      # - "stdio" for standard input/output (useful for testing)
+      - MCP_TRANSPORT=sse
+      - LOG_LEVEL=INFO
+    volumes:
+      - .:/app
