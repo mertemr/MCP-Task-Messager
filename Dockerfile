@@ -16,10 +16,11 @@ ENV UV_PROJECT_ENVIRONMENT=/usr/local \
     UV_COMPILE_BYTECODE=1 \
     UV_NO_EDITABLE=1
 
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-install-project --no-dev
+    uv sync --no-dev
 
 FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS base
 
@@ -38,16 +39,11 @@ RUN addgroup -g 1000 -S appgroup && \
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /usr/local/lib/python${PYTHON_VERSION} /usr/local/lib/python${PYTHON_VERSION}
 
-COPY --chown=1000:1000 . .
-
 USER appuser
-
-ENV GOOGLE_CHAT_WEBHOOK_URL="" \
-    TASK_OWNER=""
 
 EXPOSE 8000
 
-CMD ["python", "-m", "task_messager.server"]
+CMD ["task-messager"]
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD wget --no-verbose --spider http://localhost:8000/sse || exit 1

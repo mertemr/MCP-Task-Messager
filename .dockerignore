@@ -10,7 +10,6 @@ __pycache__/
 .idea/
 .vscode/
 .*_cache/
-README.md
 *.env*
 dist/
 build/
