@@ -19,21 +19,47 @@ except ImportError:
 logger = setup_logging()
 
 
-def _resolve_task_owner_and_participants(
+async def _resolve_task_owner_and_participants(
     raw_owner: str | None, participants: list[str]
 ) -> tuple[str | None, list[str] | None]:
+    """Resolve raw owner/participants against known team members (from `list_members`).
+
+    Tries exact match first, then prefix/substring match. Falls back to original
+    provided names if no known member is matched.
+    """
     effective_task_owner = None
     effective_participants: list[str] | None = None
+
+    try:
+        members_resp = await list_members()
+        known_members = members_resp.get("members", []) if isinstance(members_resp, dict) else []
+    except Exception:
+        logger.exception("Failed to fetch team members for name resolution")
+        known_members = []
+
+    def _match_name(candidate: str) -> str | None:
+        if not candidate or not isinstance(candidate, str):
+            return None
+        name = candidate.strip()
+        lc = name.lower()
+        for m in known_members:
+            if m.lower() == lc:
+                return m
+        for m in known_members:
+            if m.lower().startswith(lc) or lc in m.lower():
+                return m
+        return name
 
     if isinstance(raw_owner, str) and "," in raw_owner and not participants:
         parts = [p.strip() for p in raw_owner.split(",") if p.strip()]
         if parts:
-            effective_task_owner = parts[0]
-            if len(parts) > 1:
-                effective_participants = list(parts[1:])
+            resolved_parts = [_match_name(p) for p in parts]
+            effective_task_owner = resolved_parts[0]
+            if len(resolved_parts) > 1:
+                effective_participants = list(resolved_parts[1:])
     else:
-        effective_task_owner = raw_owner
-        effective_participants = participants
+        effective_task_owner = _match_name(raw_owner) if raw_owner else None
+        effective_participants = [_match_name(p) for p in (participants or []) if isinstance(p, str) and p.strip()]
 
     if effective_participants is None:
         effective_participants = []
@@ -113,7 +139,9 @@ async def send_google_chat_message(
     """
     try:
         raw_owner = task_owner or os.getenv("TASK_OWNER")
-        effective_task_owner, effective_participants = _resolve_task_owner_and_participants(raw_owner, participants)
+        effective_task_owner, effective_participants = await _resolve_task_owner_and_participants(
+            raw_owner, participants
+        )
         resolved_steps: list[SolutionStep] | None = None
 
         if analysis_steps is not None:
@@ -177,7 +205,8 @@ async def list_members() -> dict[str, Any]:
 def main() -> None:
     logger.info("Starting MCP server...")
     try:
-        app.run(transport="sse")
+        MCP_TRANSPORT = os.getenv("MCP_TRANSPORT", "sse").lower()
+        app.run(transport=MCP_TRANSPORT)
     except KeyboardInterrupt:
         logger.info("Interrupted")
         sys.exit(0)
