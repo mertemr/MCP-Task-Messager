@@ -39,6 +39,15 @@ app = FastMCP(
         domain-specific investigation steps and acceptance criteria are pre-filled.
         The user can override any field explicitly.
 
+        CRITICAL - task_owner vs participants rules:
+          - task_owner is WHO THE TASK IS ASSIGNED TO (the responsible person).
+          - participants are OBSERVERS / STAKEHOLDERS who are mentioned but are NOT the assignee.
+          - If the user says "bana aç" or does not specify → task_owner = TASK_OWNER env var (the requester themselves).
+          - If the user says "Ali'ye aç" or "Ali'ye ver" → task_owner = "Ali", even if others are mentioned.
+          - If the user says "katılımcılar: X, Y" or "CC: X, Y" or "ekle: X, Y" → those go to participants, NOT task_owner.
+          - NEVER assign the task to participants. The task is always owned by a single task_owner.
+          - participants is a separate field shown as "Katılımcılar" in the card — it is purely informational.
+
         Always confirm the filled-in card details before sending unless the user
         explicitly says "gönder" or "send directly".
     """),
@@ -98,8 +107,16 @@ def build_cards_payload(data: SendMessageInput) -> dict[str, Any]:
     if data.task_owner:
         meta_widgets.append({
             "keyValue": {
-                "topLabel": "Sorumlu",
+                "topLabel": "Atanan",
                 "content": html.escape(str(data.task_owner)),
+            }
+        })
+
+    if data.participants:
+        meta_widgets.append({
+            "keyValue": {
+                "topLabel": "Katılımcılar",
+                "content": html.escape(", ".join(data.participants)),
             }
         })
 
@@ -167,7 +184,11 @@ async def post_to_webhook(payload: dict[str, Any]) -> SendMessageResult:
     description=(
         "Send a structured investigation task message to Google Chat space via webhook. "
         "Pick the correct domain so that investigation steps and acceptance criteria are "
-        "automatically pre-filled: 'backend', 'frontend', 'devops', 'mobile', 'data', 'business', or 'general'."
+        "automatically pre-filled: 'backend', 'frontend', 'devops', 'mobile', 'data', 'business', or 'general'. "
+        "IMPORTANT: task_owner is the single assignee of the task. "
+        "participants are additional people to be notified — they are never the assignee. "
+        "If the user says 'bana aç' or does not specify an assignee, use the TASK_OWNER env var. "
+        "If the user says 'Ali'ye aç', set task_owner to Ali regardless of who else is mentioned."
     ),
 )
 async def send_google_chat_message(
@@ -177,6 +198,7 @@ async def send_google_chat_message(
     estimated_duration: str,
     domain: str = "general",
     task_owner: str | None = None,
+    participants: list[str] | None = None,
     analysis_steps: list[dict[str, str]] | None = None,
     acceptance_criteria: list[str] | None = None,
 ) -> dict[str, Any]:
@@ -188,7 +210,11 @@ async def send_google_chat_message(
         problem: Detailed problem statement
         estimated_duration: Estimated effort (e.g., '2 Saat')
         domain: Task domain — backend | frontend | devops | mobile | data | business | general
-        task_owner: Person responsible (optional, falls back to TASK_OWNER env var)
+        task_owner: The single person the task is ASSIGNED TO. Falls back to TASK_OWNER env var.
+                    If the user says "Ali'ye aç", this should be "Ali".
+                    If the user says "bana aç" or doesn't specify, use the env var default.
+        participants: Additional observers/stakeholders. Shown as "Katılımcılar" in the card.
+                      NEVER put participants in task_owner. These are informational only.
         analysis_steps: Custom investigation steps (optional, uses domain defaults if omitted)
         acceptance_criteria: Custom acceptance criteria (optional, uses domain defaults if omitted)
     """
@@ -206,6 +232,7 @@ async def send_google_chat_message(
             estimated_duration=estimated_duration,
             domain=domain,
             task_owner=effective_task_owner,
+            participants=participants or [],
             analysis_steps=resolved_steps,
             acceptance_criteria=acceptance_criteria,
         )
