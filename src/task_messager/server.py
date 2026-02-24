@@ -1,14 +1,11 @@
-import html
 import os
 import sys
-from textwrap import dedent
 from typing import Any
 
 import httpx
-from mcp.server.fastmcp import FastMCP
 
-from task_messager import __version__
-from task_messager.core import DOMAINS
+from task_messager.core import DOMAINS, app, httpx_client
+from task_messager.formatter import build_cards_payload
 from task_messager.logger import setup_logging
 from task_messager.models import SendMessageInput, SendMessageResult, SolutionStep
 
@@ -20,134 +17,32 @@ except ImportError:
     pass
 
 logger = setup_logging()
-app = FastMCP(
-    name="task-mcp",
-    instructions=dedent("""
-        You are a helpful assistant that formats support investigation tasks
-        into structured messages and sends them to a Google Chat space via webhook.
-
-        Available domains / task types:
-          - backend   : API, database, queue, microservice issues
-          - frontend  : UI bug, rendering, performance, browser compatibility
-          - devops    : CI/CD, infrastructure, Docker, cloud, deployment
-          - mobile    : iOS/Android crash, build, store submission
-          - data      : Data pipeline, ETL, analytics, reporting issues
-          - business  : Non-technical tasks like documentation, process improvement, etc.
-          - general   : Catch-all when domain is unclear
-
-        When the user describes a task, pick the most suitable domain so that
-        domain-specific investigation steps and acceptance criteria are pre-filled.
-        The user can override any field explicitly.
-
-        CRITICAL - task_owner vs participants rules:
-          - task_owner is WHO THE TASK IS ASSIGNED TO (the responsible person).
-          - participants are OBSERVERS / STAKEHOLDERS who are mentioned but are NOT the assignee.
-          - If the user says "bana aç" or does not specify → task_owner = TASK_OWNER env var (the requester themselves).
-          - If the user says "Ali'ye aç" or "Ali'ye ver" → task_owner = "Ali", even if others are mentioned.
-          - If the user says "katılımcılar: X, Y" or "CC: X, Y" or "ekle: X, Y" → those go to participants, NOT task_owner.
-          - NEVER assign the task to participants. The task is always owned by a single task_owner.
-          - participants is a separate field shown as "Katılımcılar" in the card — it is purely informational.
-
-        Always confirm the filled-in card details before sending unless the user
-        explicitly says "gönder" or "send directly".
-    """),
-    host=os.getenv("MCP_HOST", "0.0.0.0"),
-    port=int(os.getenv("MCP_PORT", "8000")),
-)
-
-httpx_client = httpx.AsyncClient(
-    headers={"User-Agent": f"MCP-Task-Messager/{__version__}"},
-    timeout=httpx.Timeout(15.0, connect=10.0),
-)
 
 
-def _format_summary_block(summary: str, problem: str) -> str:
-    return f"<b>Özet:</b> {html.escape(summary)}<br><br><b>Problem:</b> {html.escape(problem)}"
+def _resolve_task_owner_and_participants(
+    raw_owner: str | None, participants: list[str]
+) -> tuple[str | None, list[str] | None]:
+    effective_task_owner = None
+    effective_participants: list[str] | None = None
 
+    if isinstance(raw_owner, str) and "," in raw_owner and not participants:
+        parts = [p.strip() for p in raw_owner.split(",") if p.strip()]
+        if parts:
+            effective_task_owner = parts[0]
+            if len(parts) > 1:
+                effective_participants = list(parts[1:])
+    else:
+        effective_task_owner = raw_owner
+        effective_participants = participants
 
-def _format_analysis_steps(steps: list[SolutionStep]) -> str:
-    lines = []
-    for step in steps:
-        lines.append(f"• <b>{html.escape(step.title)}:</b> {html.escape(step.detail)}")
-    return "<br>".join(lines)
+    if effective_participants is None:
+        effective_participants = []
 
+    effective_participants = [p.strip() for p in effective_participants if isinstance(p, str) and p.strip()]
+    if effective_task_owner and isinstance(effective_task_owner, str):
+        effective_participants = [p for p in effective_participants if p != effective_task_owner]
 
-def _format_acceptance_criteria(criteria: list[str]) -> str:
-    return "<br>".join(f"• {html.escape(item)}" for item in criteria)
-
-
-# ---------------------------------------------------------------------------
-# Card builder
-# ---------------------------------------------------------------------------
-
-
-def build_cards_payload(data: SendMessageInput) -> dict[str, Any]:
-    """Build Google Chat cards payload that follows the investigation template."""
-
-    domain_info = data.resolved_domain()
-    domain_label = domain_info.get("label", "Genel")
-
-    sections: list[dict[str, Any]] = []
-
-    meta_widgets: list[dict[str, Any]] = [
-        {
-            "keyValue": {
-                "topLabel": "Alan",
-                "content": f"{html.escape(domain_label)}",
-            }
-        },
-        {
-            "keyValue": {
-                "topLabel": "Tahmini Süre",
-                "content": html.escape(data.estimated_duration),
-            }
-        },
-    ]
-
-    if data.task_owner:
-        meta_widgets.append({
-            "keyValue": {
-                "topLabel": "Atanan",
-                "content": html.escape(str(data.task_owner)),
-            }
-        })
-
-    if data.participants:
-        meta_widgets.append({
-            "keyValue": {
-                "topLabel": "Katılımcılar",
-                "content": html.escape(", ".join(data.participants)),
-            }
-        })
-
-    sections.append({"widgets": meta_widgets})
-
-    sections.append({
-        "header": "Görev Açıklaması",
-        "widgets": [{"textParagraph": {"text": _format_summary_block(data.summary, data.problem)}}],
-    })
-
-    sections.append({
-        "header": "Muhtemel Çözüm",
-        "widgets": [{"textParagraph": {"text": _format_analysis_steps(data.resolved_steps())}}],
-    })
-
-    sections.append({
-        "header": "Kabul Kriterleri",
-        "widgets": [{"textParagraph": {"text": _format_acceptance_criteria(data.resolved_criteria())}}],
-    })
-
-    card = {
-        "header": {"title": data.title},
-        "sections": sections,
-    }
-
-    return {"cards": [card]}
-
-
-# ---------------------------------------------------------------------------
-# Webhook sender
-# ---------------------------------------------------------------------------
+    return effective_task_owner, effective_participants
 
 
 async def post_to_webhook(payload: dict[str, Any]) -> SendMessageResult:
@@ -177,8 +72,6 @@ async def post_to_webhook(payload: dict[str, Any]) -> SendMessageResult:
 # ---------------------------------------------------------------------------
 # MCP Tools
 # ---------------------------------------------------------------------------
-
-
 @app.tool(
     title="Send Google Chat Message",
     description=(
@@ -219,11 +112,14 @@ async def send_google_chat_message(
         acceptance_criteria: Custom acceptance criteria (optional, uses domain defaults if omitted)
     """
     try:
-        effective_task_owner = task_owner or os.getenv("TASK_OWNER")
-
+        raw_owner = task_owner or os.getenv("TASK_OWNER")
+        effective_task_owner, effective_participants = _resolve_task_owner_and_participants(raw_owner, participants)
         resolved_steps: list[SolutionStep] | None = None
+
         if analysis_steps is not None:
-            resolved_steps = [SolutionStep(**step) for step in analysis_steps]
+            resolved_steps = [SolutionStep.model_validate(step) for step in analysis_steps]
+        elif domain in DOMAINS:
+            resolved_steps = [SolutionStep.model_validate(step) for step in DOMAINS[domain]["analysis_steps"]]
 
         data = SendMessageInput(
             title=title,
@@ -232,7 +128,7 @@ async def send_google_chat_message(
             estimated_duration=estimated_duration,
             domain=domain,
             task_owner=effective_task_owner,
-            participants=participants or [],
+            participants=effective_participants or None,
             analysis_steps=resolved_steps,
             acceptance_criteria=acceptance_criteria,
         )
@@ -261,6 +157,21 @@ async def list_domains() -> dict[str, Any]:
         }
         for domain_key, info in DOMAINS.items()
     }
+
+
+@app.tool(
+    title="List Members for name resolution",
+    description=(
+        "List all members that can be used for task_owner and participants."
+        "Useful to understand how to specify assignees and participants."
+    ),
+)
+async def list_members() -> dict[str, Any]:
+    """Return a list of members for name resolution."""
+
+    team_members = os.getenv("TEAM_MEMBERS", "")
+    members = [m.strip() for m in team_members.split(",") if m.strip()]
+    return {"members": members}
 
 
 def main() -> None:
