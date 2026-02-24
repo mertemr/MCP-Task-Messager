@@ -49,5 +49,5 @@ EXPOSE 8000
 
 CMD ["python", "-m", "task_messager.server"]
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --spider http://localhost:8000 || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --spider http://localhost:8000/sse || exit 1

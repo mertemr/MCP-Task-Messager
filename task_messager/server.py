@@ -42,7 +42,7 @@ app = FastMCP(
         The messages should follow a specific template with sections for task description,
         investigation steps, and acceptance criteria.
     """),
-    host=os.getenv("MCP_HOST", "127.0.0.1"),
+    host=os.getenv("MCP_HOST", "0.0.0.0"),
     port=int(os.getenv("MCP_PORT", "8000")),
 )
 httpx_client = httpx.AsyncClient(
@@ -283,7 +283,7 @@ def main() -> None:
     logger.info("Starting MCP server...")
 
     try:
-        app.run()
+        app.run(transport="sse")
     except KeyboardInterrupt:
         logger.info("Interrupted")
         sys.exit(0)
